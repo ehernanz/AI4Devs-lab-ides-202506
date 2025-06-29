@@ -14,7 +14,30 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Candidate {
+  id                Int      @id @default(autoincrement())
+  nombre            String
+  apellido          String
+  email             String   @unique
+  telefono          String
+  direccion         String
+  educacion         String
+  experienciaLaboral String
+  archivoNombre     String?
+  archivoTipo       String?
+  archivoRuta       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("candidates")
 }
