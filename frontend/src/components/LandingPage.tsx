@@ -10,6 +10,10 @@ const LandingPage: React.FC = () => {
     navigate('/add-candidate');
   };
 
+  const handleUserManagement = () => {
+    navigate('/users');
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -39,6 +43,15 @@ const LandingPage: React.FC = () => {
               <span className="button-icon">➕</span>
               <span className="button-text">Añadir Candidato</span>
             </button>
+            {user.role === 'admin' && (
+              <button
+                className="menu-button user-management-btn"
+                onClick={handleUserManagement}
+              >
+                <span className="button-icon">👤</span>
+                <span className="button-text">Gestión de usuarios</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

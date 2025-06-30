@@ -6,7 +6,7 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
-import { authenticateToken, AuthRequest } from './middleware/auth';
+import { authenticateToken, AuthRequest, requireAdmin } from './middleware/auth';
 import { upload, handleUploadError } from './middleware/upload';
 
 dotenv.config();
@@ -26,6 +26,98 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.get('/', (req, res) => {
   res.send('Hola LTI!');
 });
+
+// --- Gestión de usuarios (solo admin) ---
+app.get('/users', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const users = await prisma.user.findMany({ select: { id: true, username: true, role: true, lastLoginAt: true, createdAt: true, updatedAt: true } });
+  res.json(users);
+});
+
+app.get('/users/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const user = await prisma.user.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { id: true, username: true, role: true, lastLoginAt: true, createdAt: true, updatedAt: true }
+  });
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json(user);
+});
+
+app.post('/users', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { username, password, role } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+    }
+    if (role && !['admin', 'user'].includes(role)) {
+      return res.status(400).json({ error: 'Rol no válido' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        role: role || 'user'
+      },
+      select: { id: true, username: true, role: true, createdAt: true }
+    });
+    res.status(201).json(newUser);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(409).json({ error: 'El nombre de usuario ya está registrado.' });
+    } else {
+      res.status(500).json({ error: 'Error al crear el usuario.' });
+    }
+  }
+});
+
+app.put('/users/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { username, password, role } = req.body;
+    const userId = Number(req.params.id);
+    const data: any = {};
+    if (username) data.username = username;
+    if (role && ['admin', 'user'].includes(role)) {
+      if (req.user && req.user.id === userId && role !== 'admin') {
+        return res.status(400).json({ error: 'No puedes cambiar tu propio rol a usuario.' });
+      }
+      data.role = role;
+    }
+    if (password) data.password = await bcrypt.hash(password, 10);
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { id: true, username: true, role: true, updatedAt: true }
+    });
+    res.json(updatedUser);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      res.status(409).json({ error: 'El nombre de usuario ya está registrado.' });
+    } else if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Usuario no encontrado.' });
+    } else {
+      res.status(500).json({ error: 'Error al actualizar el usuario.' });
+    }
+  }
+});
+
+app.delete('/users/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const userId = Number(req.params.id);
+  if (req.user && req.user.id === userId) {
+    return res.status(400).json({ error: 'No puedes eliminar tu propio usuario.' });
+  }
+  try {
+    await prisma.user.delete({ where: { id: userId } });
+    res.json({ success: true });
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Usuario no encontrado.' });
+    } else {
+      res.status(500).json({ error: 'Error al eliminar el usuario.' });
+    }
+  }
+});
+
+// --- Fin gestión de usuarios ---
 
 // Ruta de login
 app.post('/login', async (req: Request, res: Response) => {
@@ -56,9 +148,9 @@ app.post('/login', async (req: Request, res: Response) => {
       data: { lastLoginAt: new Date() }
     });
 
-    // Generar token JWT
+    // Generar token JWT (ahora incluye el rol)
     const token = jwt.sign(
-      { id: user.id, username: user.username },
+      { id: user.id, username: user.username, role: user.role },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -67,7 +159,8 @@ app.post('/login', async (req: Request, res: Response) => {
       token,
       user: {
         id: user.id,
-        username: user.username
+        username: user.username,
+        role: user.role
       }
     });
   } catch (error) {

@@ -21,7 +21,8 @@ async function initAdmin() {
     await prisma.user.create({
       data: {
         username: 'admin',
-        password: hashedPassword
+        password: hashedPassword,
+        role: 'admin'
       }
     });
 
