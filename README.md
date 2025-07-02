@@ -93,3 +93,14 @@ Para detener el contenedor Docker, ejecuta el siguiente comando:
 ```
 docker-compose down
 ```
+
+cd backend
+
+prisma generate
+
+npx prisma migrate dev --name add_candidate_model
+
+npx prisma migrate dev --name add_user_model
+
+
+npx ts-node src/scripts/initAdmin.ts
